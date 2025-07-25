@@ -30,14 +30,18 @@ def add_album(cur):
     cur.execute(sql)
 
 def edit_album(cur):
-    album_id = input("Enter AlbumId to edit: ")
-    new_title = input("New album title: ")
-    new_artist_id = input("New artist ID: ")
+    album_id = input("Enter AlbumId to edit: ").strip()
+    new_title = input("New album title: ").strip()
+    new_artist_id = input("New artist ID: ").strip()
+
+    if not (album_id.isdigit() and new_artist_id.isdigit() and new_title):
+        print("Invalid input. Ensure IDs are numbers and title is not blank.")
+        return
 
     #
-    sql = f"UPDATE albums SET Title = '{new_title}', ArtistId = {new_artist_id} WHERE AlbumId = {album_id}"
-    print(f"Executing: {sql}")
-    cur.execute(sql)
+    sql = "UPDATE albums SET Title = ?, ArtistId = ? WHERE AlbumId = ?"
+    cur.execute(sql, (new_title, int(new_artist_id), int(album_id)))
+    print(f"Executing: {sql} with values ({new_title}, {new_artist_id}, {album_id})")
 
 def delete_album(cur):
     album_id = input("Enter AlbumId to delete: ")
@@ -52,7 +56,7 @@ def main():
     cur = con.cursor()
 
     while True:
-        print("\n--- Album Management Menu (Vulnerable Version) ---")
+        print("\n--- Album Management Menu Version) ---")
         print("1. List Albums")
         print("2. List Artists")
         print("3. Add Album")
