@@ -40,7 +40,7 @@ import time
 # Configuration constants for security and robustness
 MAX_RETRIES = 3                    # Prevent infinite loops from user errors
 MAX_INPUT_LENGTH = 200             # Prevent buffer overflow and resource exhaustion
-MAX_QUERY_RESULTS = 50             # Prevent memory exhaustion from large result sets
+MAX_QUERY_RESULTS = 200            # Increased from 50 to show more records
 DATABASE_PATH = 'chinook.db'
 BACKUP_SUFFIX = '.backup'
 
@@ -403,7 +403,7 @@ class UserInterface:
     
     def list_albums(self):
         """
-        Display albums with comprehensive error handling
+        Display albums with comprehensive error handling and pagination
         
         SECURITY IMPROVEMENTS:
         - Original: No error handling, would crash on database errors
@@ -416,18 +416,71 @@ class UserInterface:
         """
         print("\n📋 Loading albums...")
         
+        # Get total count first
+        count_query = "SELECT COUNT(*) FROM albums"
+        count_result = self.db_manager.safe_execute(count_query)
+        total_albums = count_result[0][0] if count_result else 0
+        
+        if total_albums == 0:
+            print("📭 No albums found in database")
+            return
+        
+        # Ask user for sorting preference
+        print(f"📊 Total albums in database: {total_albums}")
+        print("\n📋 Sort options:")
+        print("1. Album ID (default)")
+        print("2. Album Title (A-Z)")
+        print("3. Artist Name (A-Z)")
+        print("4. Album ID (descending)")
+        
+        sort_choice = self.get_input_with_retry(
+            "Choose sort option (1-4, or press Enter for default): ",
+            lambda x, y, z: x if not x.strip() else self.validator.validate_menu_choice(x, 1, 4),
+            "Sort choice"
+        )
+        
+        if sort_choice is None:
+            sort_choice = 1  # Default to Album ID
+        
+        # Define sort options
+        sort_options = {
+            1: "albums.AlbumId ASC",
+            2: "albums.Title ASC", 
+            3: "artists.Name ASC",
+            4: "albums.AlbumId DESC"
+        }
+        
+        sort_clause = sort_options.get(sort_choice, "albums.AlbumId ASC")
+        
+        # Ask user how many records to show
+        show_all = self.get_input_with_retry(
+            f"Show all albums ({total_albums}) or limit to {MAX_QUERY_RESULTS}? (all/limit): ",
+            lambda x, y: x.lower() if x.lower() in ['all', 'limit'] else None,
+            "Choice"
+        )
+        
+        if show_all is None:
+            return
+        
+        if show_all.lower() == 'all':
+            limit = total_albums
+            print(f"📋 Loading all {total_albums} albums...")
+        else:
+            limit = MAX_QUERY_RESULTS
+            print(f"📋 Loading up to {limit} albums...")
+        
         # SECURITY: Use parameterized query to prevent SQL injection
         # Original: f"SELECT * FROM albums LIMIT {limit}"
         # Fixed: "SELECT * FROM albums LIMIT ?" with parameter tuple
-        query = """
+        query = f"""
             SELECT albums.AlbumId, albums.Title, artists.Name
             FROM albums
             JOIN artists ON albums.ArtistId = artists.ArtistId
-            ORDER BY albums.AlbumId
+            ORDER BY {sort_clause}
             LIMIT ?
         """
         
-        results = self.db_manager.safe_execute(query, (MAX_QUERY_RESULTS,))
+        results = self.db_manager.safe_execute(query, (limit,))
         
         if results is None:
             print("❌ Failed to load albums")
@@ -437,7 +490,7 @@ class UserInterface:
             print("📭 No albums found in database")
             return
         
-        print(f"\n📋 Albums (showing up to {len(results)}):")
+        print(f"\n📋 Albums (showing {len(results)} of {total_albums}):")
         print("-" * 80)
         print(f"{'ID':<5} | {'Title':<40} | {'Artist':<30}")
         print("-" * 80)
@@ -449,17 +502,72 @@ class UserInterface:
             title = str(row[1])[:38] + "..." if len(str(row[1])) > 40 else str(row[1])
             artist = str(row[2])[:28] + "..." if len(str(row[2])) > 30 else str(row[2])
             print(f"{album_id:<5} | {title:<40} | {artist:<30}")
+        
+        if len(results) < total_albums:
+            print(f"\n📄 Showing {len(results)} of {total_albums} albums")
+            print("💡 Use 'all' option to see all albums")
     
     def list_artists(self):
         """
-        Display artists with comprehensive error handling
+        Display artists with comprehensive error handling and pagination
         
         SECURITY IMPROVEMENTS: Same as list_albums()
         """
         print("\n👥 Loading artists...")
         
-        query = "SELECT ArtistId, Name FROM artists ORDER BY Name LIMIT ?"
-        results = self.db_manager.safe_execute(query, (MAX_QUERY_RESULTS,))
+        # Get total count first
+        count_query = "SELECT COUNT(*) FROM artists"
+        count_result = self.db_manager.safe_execute(count_query)
+        total_artists = count_result[0][0] if count_result else 0
+        
+        if total_artists == 0:
+            print("📭 No artists found in database")
+            return
+        
+        # Ask user for sorting preference
+        print(f"📊 Total artists in database: {total_artists}")
+        print("\n👥 Sort options:")
+        print("1. Artist Name (A-Z, default)")
+        print("2. Artist ID (ascending)")
+        print("3. Artist ID (descending)")
+        
+        sort_choice = self.get_input_with_retry(
+            "Choose sort option (1-3, or press Enter for default): ",
+            lambda x, y, z: x if not x.strip() else self.validator.validate_menu_choice(x, 1, 3),
+            "Sort choice"
+        )
+        
+        if sort_choice is None:
+            sort_choice = 1  # Default to Artist Name
+        
+        # Define sort options
+        sort_options = {
+            1: "Name ASC",
+            2: "ArtistId ASC",
+            3: "ArtistId DESC"
+        }
+        
+        sort_clause = sort_options.get(sort_choice, "Name ASC")
+        
+        # Ask user how many records to show
+        show_all = self.get_input_with_retry(
+            f"Show all artists ({total_artists}) or limit to {MAX_QUERY_RESULTS}? (all/limit): ",
+            lambda x, y: x.lower() if x.lower() in ['all', 'limit'] else None,
+            "Choice"
+        )
+        
+        if show_all is None:
+            return
+        
+        if show_all.lower() == 'all':
+            limit = total_artists
+            print(f"👥 Loading all {total_artists} artists...")
+        else:
+            limit = MAX_QUERY_RESULTS
+            print(f"👥 Loading up to {limit} artists...")
+        
+        query = f"SELECT ArtistId, Name FROM artists ORDER BY {sort_clause} LIMIT ?"
+        results = self.db_manager.safe_execute(query, (limit,))
         
         if results is None:
             print("❌ Failed to load artists")
@@ -469,7 +577,7 @@ class UserInterface:
             print("📭 No artists found in database")
             return
         
-        print(f"\n👥 Artists (showing up to {len(results)}):")
+        print(f"\n👥 Artists (showing {len(results)} of {total_artists}):")
         print("-" * 60)
         print(f"{'ID':<5} | {'Name':<50}")
         print("-" * 60)
@@ -478,6 +586,10 @@ class UserInterface:
             artist_id = row[0]
             name = str(row[1])[:48] + "..." if len(str(row[1])) > 50 else str(row[1])
             print(f"{artist_id:<5} | {name:<50}")
+        
+        if len(results) < total_artists:
+            print(f"\n📄 Showing {len(results)} of {total_artists} artists")
+            print("💡 Use 'all' option to see all artists")
     
     def check_artist_exists(self, artist_id: int) -> bool:
         """
@@ -608,7 +720,7 @@ class UserInterface:
         # Original: Required new title, no option to keep current
         new_title = self.get_input_with_retry(
             "Enter new title (or press Enter to keep current): ",
-            lambda x, y: x if not x.strip() else self.validator.validate_string(x, y),
+            lambda x, y, z: x if not x.strip() else self.validator.validate_string(x, y, z),
             "Album title",
             100
         )
